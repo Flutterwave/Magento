@@ -1,0 +1,77 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <type name="Magento\Payment\Model\MethodList">
+        <arguments>
+            <argument name="paymentMethodGroups" xsi:type="array">
+                <item name="flutterwavepayment" xsi:type="string">Flutterwave</item>
+            </argument>
+        </arguments>
+    </type>
+
+    <!-- Validator Pool Configuration -->
+    <virtualType name="FlutterwavePaymentValidatorPool" type="Magento\Payment\Gateway\Validator\ValidatorPool">
+        <arguments>
+            <argument name="validators" xsi:type="array">
+                <!-- Add validators here when needed -->
+            </argument>
+        </arguments>
+    </virtualType>
+
+    <virtualType name="FlutterwavePaymentCommandManager" type="Magento\Payment\Gateway\Command\CommandManager">
+        <arguments>
+            <argument name="commandPool" xsi:type="object">FlutterwavePaymentCommandPool</argument>
+        </arguments>
+    </virtualType>
+
+    <!-- Command Pool Configuration (Choose ONE approach - this is recommended) -->
+    <virtualType name="FlutterwavePaymentCommandPool" type="Magento\Payment\Gateway\Command\CommandPool">
+        <arguments>
+            <argument name="commands" xsi:type="array">
+                <item name="initialize" xsi:type="string">Flutterwave\Payment\Gateway\Command\InitializeCommand</item>
+                <item name="verify" xsi:type="string">Flutterwave\Payment\Gateway\Command\VerifyCommand</item>
+                <item name="capture" xsi:type="string">\Magento\Payment\Gateway\Command\NullCommand</item>
+                <item name="authorize" xsi:type="string">\Magento\Payment\Gateway\Command\NullCommand</item>
+            </argument>
+        </arguments>
+    </virtualType>
+
+    <!-- Payment Adapter Configuration -->
+    <type name="Flutterwave\Payment\Model\Payment\FlutterwaveAdapter">
+        <arguments>
+            <argument name="eventManager" xsi:type="object">Magento\Framework\Event\Manager</argument>
+            <argument name="valueHandlerPool" xsi:type="object">FlutterwavePaymentValueHandlerPool</argument>
+            <argument name="paymentDataObjectFactory" xsi:type="object">Magento\Payment\Gateway\Data\PaymentDataObjectFactory</argument>
+            <argument name="code" xsi:type="const">Flutterwave\Payment\Model\Payment\FlutterwaveAdapter::CODE</argument>
+            <argument name="formBlockType" xsi:type="string">Flutterwave\Payment\Block\Form\Flutterwave</argument>
+            <argument name="infoBlockType" xsi:type="string">Flutterwave\Payment\Block\Info\Flutterwave</argument>
+
+            <!-- Use Command Pool (recommended) -->
+            <argument name="commandPool" xsi:type="object">FlutterwavePaymentCommandPool</argument>
+            <argument name="commandExecutor" xsi:type="object">FlutterwavePaymentCommandManager</argument>
+
+            <argument name="validatorPool" xsi:type="object">FlutterwavePaymentValidatorPool</argument>
+            <argument name="logger" xsi:type="object">Magento\Framework\Logger\Monolog</argument>
+        </arguments>
+    </type>
+
+    <!-- Value Handler Configuration -->
+    <virtualType name="FlutterwavePaymentValueHandlerPool" type="Magento\Payment\Gateway\Config\ValueHandlerPool">
+        <arguments>
+            <argument name="handlers" xsi:type="array">
+                <item name="default" xsi:type="string">FlutterwavePaymentConfigValueHandler</item>
+            </argument>
+        </arguments>
+    </virtualType>
+
+    <virtualType name="FlutterwavePaymentConfigValueHandler" type="Magento\Payment\Gateway\Config\ConfigValueHandler">
+        <arguments>
+            <argument name="configInterface" xsi:type="object">FlutterwavePaymentConfig</argument>
+        </arguments>
+    </virtualType>
+
+    <virtualType name="FlutterwavePaymentConfig" type="Magento\Payment\Gateway\Config\Config">
+        <arguments>
+            <argument name="methodCode" xsi:type="const">Flutterwave\Payment\Model\Payment\FlutterwaveAdapter::CODE</argument>
+        </arguments>
+    </virtualType>
+</config>

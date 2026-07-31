@@ -1,0 +1,3 @@
+<referenceBlock name="order_info">
+    <block class="Flutterwave\Payment\Block\Info\Flutterwave" name="info.flutterwave" template="Flutterwave_Payment::info/flutterwave.phtml"/>
+</referenceBlock>

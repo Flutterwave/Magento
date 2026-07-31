@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<payment_methods xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Payment:etc/payment_methods.xsd">
+    <method name="flutterwave">
+        <title>Flutterwave</title>
+        <renderer>Flutterwave_Payment/js/view/payment/method-renderer/flutterwave-method</renderer>
+    </method>
+</payment_methods>

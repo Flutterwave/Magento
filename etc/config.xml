@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Config/etc/config.xsd">
+    <default>
+        <payment>
+            <flutterwave>
+                <active>1</active>
+                <title>Flutterwave</title>
+                <model>Flutterwave\Payment\Model\Payment\FlutterwaveAdapter</model>
+                <order_status>processing</order_status>
+                <api_key>FLWSECK_TEST-XXXXXXXXXXXXXXXXXXX-X</api_key>
+                <is_gateway>1</is_gateway>
+                <group>offline</group>
+                <sort_order>1</sort_order>
+                <order_status>pending</order_status>
+                <can_order>1</can_order>
+                <can_use_internal>1</can_use_internal>
+                <can_use_checkout>1</can_use_checkout>
+                <!-- <can_authorize>1</can_authorize> -->
+                <allowspecific>0</allowspecific>
+            </flutterwave>
+        </payment>
+    </default>
+</config>
