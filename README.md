@@ -26,7 +26,7 @@ Flutterwave Payment is a Magento 2 module that integrates the Flutterwave paymen
 2. From the Magento project root run:
 
 ```bash
-php bin/magento module:enable Novac_Payment
+php bin/magento module:enable Flutterwave_Payment
 php bin/magento setup:upgrade
 php bin/magento setup:di:compile
 php bin/magento cache:flush
@@ -79,14 +79,14 @@ Important code locations:
 - Admin config form: `etc/adminhtml/system.xml` and block `Block/Adminhtml/System/Config/WebhookUrl.php`
 - Gateway commands: `Gateway/Command/InitializeCommand.php`, `Gateway/Command/VerifyCommand.php`
 - API client: `Model/Api/Client.php`
-- Payment adapter: `Model/Payment/NovacAdapter.php`
+- Payment adapter: `Model/Payment/FlutterwaveAdapter.php`
 - Payment model: `Model/Payment.php`
 - Frontend UI/js: `view/frontend/web/js/view/payment/flutterwave.js` and renderer
 - Admin and frontend templates: `view/*/template` and `view/*/layout` files
 
 ## Extending or customizing
 
-- To customize request/response handling, modify `Model/Api/Client.php` and `Model/Payment/NovacAdapter.php`.
+- To customize request/response handling, modify `Model/Api/Client.php` and `Model/Payment/FlutterwaveAdapter.php`.
 - To change checkout behaviors or UI, edit the KnockoutJS view models in `view/frontend/web/js/view/payment/` and the template `view/frontend/web/template/payment/flutterwave.html`.
 - Add unit/integration tests alongside the relevant classes where needed.
 
