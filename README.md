@@ -1,19 +1,25 @@
-# flutterwave-magento
+<p align="center">
+    <img title="Flutterwave" height="200" src="https://flutterwave.com/images/logo/full.svg" width="50%"/>
+</p>
 
-The Offical Magento integration for Flutterwave Merchants.
-Flutterwave Payment for Magento 2
-================================
+# Flutterwave Magento
 
-## Overview
+## Releases
 
-Flutterwave Payment is a Magento 2 module that integrates the Flutterwave payment gateway into your store. It provides a frontend payment method for customers at checkout, admin configuration for API credentials, and webhook handlers for payment notifications.
+Download the latest packaged module ZIP from the GitHub Releases page:
 
-## Key features
+- [Releases](https://github.com/OWNER/REPO/releases)
 
-- Add Flutterwave as a payment method in checkout
-- Admin configuration for API keys and settings
-- Webhook endpoint for asynchronous payment notifications
-- Order verification and callback handling
+## Introduction
+
+The Magento Plugin makes it very easy and quick to add Flutterwave Payment option on Checkout for your online store. Accept Credit card, Debit card and Bank account payment directly on your store with the Rave payment gateway for WooCommerce.
+
+Available features include:
+
+- Collections: Card, Account, Mobile money, Bank Transfers, USSD, Barter, NQR.
+- Recurring payments: Tokenization and Subscriptions (WooCommerce Subscriptions).
+- Split payments: Split payments between multiple recipients.
+
 
 ## Requirements
 
