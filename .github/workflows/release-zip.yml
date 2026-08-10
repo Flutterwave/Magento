@@ -1,0 +1,39 @@
+name: Release ZIP
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload-zip:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create zip archive
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ARCHIVE_NAME="flutterwave-payment-${GITHUB_REF_NAME}.zip"
+
+          zip -r "$ARCHIVE_NAME" . \
+            -x ".git/*" \
+            -x ".github/*" \
+            -x "node_modules/*" \
+            -x "vendor/*" \
+            -x "var/*" \
+            -x "*.DS_Store"
+
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> "$GITHUB_ENV"
+
+      - name: Upload zip to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./${{ env.ARCHIVE_NAME }}
+          fail_on_unmatched_files: true
