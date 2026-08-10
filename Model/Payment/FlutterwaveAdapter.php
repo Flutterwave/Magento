@@ -42,13 +42,13 @@ class FlutterwaveAdapter extends Adapter
         string $code,
         string $formBlockType,
         string $infoBlockType,
-        CommandPoolInterface $commandPool = null,
-        ValidatorPoolInterface $validatorPool = null,
-        CommandManagerInterface $commandExecutor = null,
-        LoggerInterface $logger = null,
         \Flutterwave\Payment\Model\Api\Client $apiClient,
         \Magento\Checkout\Model\Session $checkoutSession,
-        UrlInterface $urlBuilder
+        UrlInterface $urlBuilder,
+        ?CommandPoolInterface $commandPool = null,
+        ?ValidatorPoolInterface $validatorPool = null,
+        ?CommandManagerInterface $commandExecutor = null,
+        ?LoggerInterface $logger = null
     ) {
         parent::__construct(
             $eventManager,
