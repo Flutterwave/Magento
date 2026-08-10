@@ -12,6 +12,7 @@ use Magento\Framework\Controller\ResultFactory;
 use Magento\Framework\Controller\Result\JsonFactory;
 use Magento\Sales\Model\OrderFactory;
 use Psr\Log\LoggerInterface;
+use Flutterwave\Payment\Model\Logger\FlutterwaveSignozLogger;
 
 class Webhook implements HttpPostActionInterface, CsrfAwareActionInterface
 {
@@ -20,19 +21,22 @@ class Webhook implements HttpPostActionInterface, CsrfAwareActionInterface
     private OrderFactory $orderFactory;
     private $payment;
     private $messageManager;
+    private FlutterwaveSignozLogger $signozLogger;
 
     public function __construct(
         LoggerInterface $logger,
         Payment $payment,
         JsonFactory $jsonFactory,
         ManagerInterface $messageManager,
-        OrderFactory $orderFactory
+        OrderFactory $orderFactory,
+        FlutterwaveSignozLogger $signozLogger
     ) {
         $this->logger = $logger;
         $this->payment = $payment;
         $this->jsonFactory = $jsonFactory;
         $this->orderFactory = $orderFactory;
         $this->messageManager = $messageManager;
+        $this->signozLogger = $signozLogger;
     }
 
     /**
@@ -106,11 +110,13 @@ class Webhook implements HttpPostActionInterface, CsrfAwareActionInterface
             $data = json_decode($payload, true);
 
             if (empty($data['data']['reference'])) {
+                $this->signozLogger->trackError('webhook.invalid_payload', 'Invalid webhook payload: Missing reference.', '', null, ['payload' => $payload]);
                 throw new \Exception('Invalid webhook payload: Missing reference.');
             }
 
             $reference = $data['data']['reference'];
             $status = $data['data']['status'];
+            $this->signozLogger->trackRequestSent('webhook', $reference, '/flutterwave/payment/webhook', ['status' => $status]);
             $parts = explode('_', $reference);
 
             if (count($parts) < 2 || !is_numeric($parts[1])) {
@@ -139,6 +145,15 @@ class Webhook implements HttpPostActionInterface, CsrfAwareActionInterface
                     $this->amounts_equal($order->getGrandTotal(), $verification['amount']) &&
                     $order->getOrderCurrencyCode() === $verification['currency']
                 ) {
+                    $this->signozLogger->trackTransaction(
+                        $reference,
+                        (string) $order->getOrderCurrencyCode(),
+                        (float) $verification['amount'],
+                        'webhook',
+                        0.0,
+                        ['order_id' => (string) $order->getIncrementId(), 'status' => $status]
+                    );
+
                     $order->setState(Order::STATE_PROCESSING)
                           ->setStatus(Order::STATE_PROCESSING);
                     $order->save();
@@ -168,6 +183,7 @@ class Webhook implements HttpPostActionInterface, CsrfAwareActionInterface
 
             } catch (\Exception $e) {
                 $this->logger->error('Flutterwave Redirect Error: ' . $e->getMessage());
+                $this->signozLogger->trackError('webhook.verify_failed', $e->getMessage(), $reference ?? '', $e->getTraceAsString(), ['status' => $status ?? 'unknown']);
                 $this->messageManager->addErrorMessage(__('A server error occurred. Please contact support.'));
                 return $resultJson->setData(['success' => false, 'message' => $e->getMessage()])->setHttpResponseCode(500);
             }
@@ -176,6 +192,7 @@ class Webhook implements HttpPostActionInterface, CsrfAwareActionInterface
             return $resultJson->setData(['success' => true, 'message' => 'Webhook for Order' . $orderIncrementId . ' received and processed'])->setHttpResponseCode(201);
         } catch (\Exception $e) {
             $this->logger->critical('Flutterwave Webhook Error: ' . $e->getMessage());
+            $this->signozLogger->trackError('webhook.exception', $e->getMessage(), '', $e->getTraceAsString(), ['source' => 'webhook']);
             return $resultJson->setData(['success' => false, 'message' => $e->getMessage()])->setHttpResponseCode(500);
         }
     }

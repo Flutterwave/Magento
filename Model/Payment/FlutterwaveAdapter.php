@@ -10,6 +10,7 @@ use Magento\Payment\Gateway\Data\PaymentDataObjectFactory;
 use Magento\Payment\Gateway\Command\CommandManagerInterface;
 use Psr\Log\LoggerInterface;
 use Magento\Framework\UrlInterface;
+use Flutterwave\Payment\Model\Logger\FlutterwaveSignozLogger;
 
 class FlutterwaveAdapter extends Adapter
 {
@@ -35,6 +36,11 @@ class FlutterwaveAdapter extends Adapter
      */
     protected $_logger;
 
+    /**
+     * @var FlutterwaveSignozLogger
+     */
+    protected $signozLogger;
+
     public function __construct(
         ManagerInterface $eventManager,
         ValueHandlerPoolInterface $valueHandlerPool,
@@ -48,7 +54,8 @@ class FlutterwaveAdapter extends Adapter
         ?CommandPoolInterface $commandPool = null,
         ?ValidatorPoolInterface $validatorPool = null,
         ?CommandManagerInterface $commandExecutor = null,
-        ?LoggerInterface $logger = null
+        ?LoggerInterface $logger = null,
+        ?FlutterwaveSignozLogger $signozLogger = null
     ) {
         parent::__construct(
             $eventManager,
@@ -67,6 +74,7 @@ class FlutterwaveAdapter extends Adapter
         $this->checkoutSession = $checkoutSession;
         $this->_urlBuilder = $urlBuilder;
         $this->_logger = $logger;
+        $this->signozLogger = $signozLogger;
     }
 
     /**
@@ -78,8 +86,18 @@ class FlutterwaveAdapter extends Adapter
         $order = $payment->getOrder();
         $order_id = $order->getIncrementId();
 
+        $txRef = "MAG_". $order_id ."_". uniqid('ab');
+
+        if ($this->signozLogger) {
+            $this->signozLogger->trackRequestSent('payment_link', $txRef, '/v3/payments', [
+                'order_id' => (string) $order_id,
+                'amount' => (float) $order->getGrandTotal(),
+                'currency' => (string) $order->getOrderCurrencyCode(),
+            ]);
+        }
+
         $response = $this->apiClient->createPaymentLink([
-            'tx_ref' => "MAG_". $order_id ."_". uniqid('ab'),
+            'tx_ref' => $txRef,
             'amount' => $order->getGrandTotal(),
             'currency' => $order->getOrderCurrencyCode(),
             'redirect_url' => $this->getCallbackUrl(),

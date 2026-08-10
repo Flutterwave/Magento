@@ -12,6 +12,7 @@ use Magento\Framework\App\RequestInterface;
 use Magento\Framework\Message\ManagerInterface;
 use Magento\Framework\Controller\ResultInterface;
 use Psr\Log\LoggerInterface;
+use Flutterwave\Payment\Model\Logger\FlutterwaveSignozLogger;
 
 class Callback implements ActionInterface
 {
@@ -23,6 +24,7 @@ class Callback implements ActionInterface
     protected $request;
     private $payment;
     private $messageManager;
+    private FlutterwaveSignozLogger $signozLogger;
 
     public function __construct(
         OrderFactory $orderFactory,
@@ -32,7 +34,8 @@ class Callback implements ActionInterface
         JsonFactory $jsonFactory,
         LoggerInterface $logger,
         ManagerInterface $messageManager,
-        RequestInterface $request
+        RequestInterface $request,
+        FlutterwaveSignozLogger $signozLogger
     ) {
         $this->orderFactory = $orderFactory;
         $this->checkoutSession = $checkoutSession;
@@ -42,6 +45,7 @@ class Callback implements ActionInterface
         $this->messageManager = $messageManager;
         $this->request = $request;
         $this->payment = $payment;
+        $this->signozLogger = $signozLogger;
     }
 
     /**
@@ -69,13 +73,13 @@ class Callback implements ActionInterface
 
         $reference = $data['client_reference'] ?? null;
         $status = $data['status'] ?? null;
+        $this->signozLogger->trackRequestSent('callback', (string) ($reference ?? 'unknown'), '/flutterwave/payment/callback', ['status' => $status ?? 'unknown']);
 
         $redirect = $this->resultRedirectFactory->create();
 
         if (!$reference || !$status) {
             $this->logger->error('Flutterwave Redirect: Missing reference or status.');
-            $this->messageManager->addErrorMessage(__('Invalid payment callback data.'));
-            return $redirect->setPath('checkout/cart');
+                $this->signozLogger->trackError('callback.invalid', 'Missing reference or status.', '', null, ['payload' => $data]);
         }
 
         try {
@@ -93,6 +97,15 @@ class Callback implements ActionInterface
                 $this->amounts_equal($order->getGrandTotal(), $verification['amount']) &&
                 $order->getOrderCurrencyCode() === $verification['currency']
             ) {
+                $this->signozLogger->trackTransaction(
+                    $reference,
+                    (string) $order->getOrderCurrencyCode(),
+                    (float) $verification['amount'],
+                    'callback',
+                    0.0,
+                    ['order_id' => (string) $order->getIncrementId(), 'status' => $status]
+                );
+
                 $order->setState(Order::STATE_PROCESSING)
                       ->setStatus(Order::STATE_PROCESSING);
                 $order->save();
@@ -122,6 +135,7 @@ class Callback implements ActionInterface
 
         } catch (\Exception $e) {
             $this->logger->error('Flutterwave Redirect Error: ' . $e->getMessage());
+            $this->signozLogger->trackError('callback.exception', $e->getMessage(), (string) ($reference ?? ''), $e->getTraceAsString(), ['source' => 'callback']);
             $this->messageManager->addErrorMessage(__('A server error occurred. Please contact support.'));
             return $redirect->setPath('checkout/cart');
         }

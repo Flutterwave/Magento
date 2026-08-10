@@ -23,6 +23,12 @@
                     <label>API Secret Key</label>
                 </field>
 
+                <field id="environment" translate="label" type="select" sortOrder="4" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Environment</label>
+                    <source_model>Flutterwave\Payment\Model\Config\Source\Environment</source_model>
+                    <comment>Choose whether the Flutterwave plugin is running in sandbox or production mode.</comment>
+                </field>
+
                 <field id="sort_order" translate="label" type="text" sortOrder="5" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Sort Order</label>
                 </field>

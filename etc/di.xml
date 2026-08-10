@@ -54,6 +54,12 @@
         </arguments>
     </type>
 
+    <type name="Flutterwave\Payment\Model\Logger\FlutterwaveSignozLogger">
+        <arguments>
+            <argument name="logger" xsi:type="object">Magento\Framework\Logger\Monolog</argument>
+        </arguments>
+    </type>
+
     <!-- Value Handler Configuration -->
     <virtualType name="FlutterwavePaymentValueHandlerPool" type="Magento\Payment\Gateway\Config\ValueHandlerPool">
         <arguments>

@@ -8,6 +8,7 @@
                 <model>Flutterwave\Payment\Model\Payment\FlutterwaveAdapter</model>
                 <order_status>processing</order_status>
                 <api_key>FLWSECK_TEST-XXXXXXXXXXXXXXXXXXX-X</api_key>
+                <environment>sandbox</environment>
                 <is_gateway>1</is_gateway>
                 <group>offline</group>
                 <sort_order>1</sort_order>
