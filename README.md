@@ -55,6 +55,7 @@ Available settings:
 - `Enable Flutterwave Payment`: Enable/disable the payment method
 - `Title`: The title shown to customers at checkout
 - `API Secret Key`: Secret API key used to sign requests
+- `Webhook Secret Hash`: Must match the Secret Hash configured for webhooks in the Flutterwave dashboard. Webhooks without a matching `verif-hash` header are rejected, and all webhooks are rejected while this is empty.
 - `API Public Key`: Public API key / identifier
 - `Sort Order`: Display order among payment methods
 - `Webhook URL`: A label/readonly field that shows the webhook endpoint you should register in the Flutterwave dashboard
@@ -67,7 +68,7 @@ Register the webhook endpoint at your Flutterwave merchant dashboard. The webhoo
 <magento_base_url>/flutterwave/payment/webhook
 ```
 
-Replace `<magento_base_url>` with your store's base URL (for example `https://store.example.com/flutterwave/payment/webhook`). The module exposes controllers to handle webhook notifications and payment callbacks.
+Replace `<magento_base_url>` with your store's base URL (for example `https://store.example.com/flutterwave/payment/webhook`). Set a Secret Hash on the same dashboard page and enter the same value in the module's `Webhook Secret Hash` setting. The module exposes controllers to handle webhook notifications and payment callbacks.
 
 ## Usage
 

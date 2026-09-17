@@ -23,6 +23,12 @@
                     <label>API Secret Key</label>
                 </field>
 
+                <field id="secret_hash" translate="label" type="obscure" sortOrder="3" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Webhook Secret Hash</label>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                    <comment>Must match the Secret Hash set on the Flutterwave dashboard webhook settings. Webhooks are rejected while this is empty.</comment>
+                </field>
+
                 <field id="environment" translate="label" type="select" sortOrder="4" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Environment</label>
                     <source_model>Flutterwave\Payment\Model\Config\Source\Environment</source_model>

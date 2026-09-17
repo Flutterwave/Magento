@@ -71,29 +71,58 @@ class Callback implements ActionInterface
         $data = $this->request->getParams();
         $this->logger->info('Flutterwave Redirect Callback Data: ' . json_encode($data));
 
-        $reference = $data['client_reference'] ?? null;
-        $status = $data['status'] ?? null;
-        $this->signozLogger->trackRequestSent('callback', (string) ($reference ?? 'unknown'), '/flutterwave/payment/callback', ['status' => $status ?? 'unknown']);
+        $clientReference = isset($data['client_reference']) ? (string) $data['client_reference'] : '';
+        $transactionId = isset($data['transaction_id']) ? (string) $data['transaction_id'] : '';
+        $this->signozLogger->trackRequestSent('callback', $clientReference !== '' ? $clientReference : 'unknown', '/flutterwave/payment/callback', ['status' => (string) ($data['status'] ?? 'unknown')]);
 
         $redirect = $this->resultRedirectFactory->create();
 
-        if (!$reference || !$status) {
-            $this->logger->error('Flutterwave Redirect: Missing reference or status.');
-                $this->signozLogger->trackError('callback.invalid', 'Missing reference or status.', '', null, ['payload' => $data]);
+        // Query parameters are attacker-controlled, so without a verifiable transaction nothing is changed.
+        // Cancelled or abandoned payments leave the order pending so the customer can retry.
+        if ($transactionId === '') {
+            $this->messageManager->addErrorMessage(__('Your payment was not completed. Please try again.'));
+            return $redirect->setPath('checkout/cart');
         }
 
         try {
-            $order = $this->orderFactory->create()->loadByIncrementId($reference);
+            $verification = $this->payment->verifyTransaction($transactionId);
+            $this->logger->info('Flutterwave Transaction Verification: ' . json_encode($verification));
+
+            if (empty($verification)) {
+                throw new \Exception("Transaction {$transactionId} could not be verified.");
+            }
+
+            $reference = $verification['tx_ref'];
+            $orderIncrementId = $this->payment->getOrderIncrementIdFromTxRef($reference);
+
+            if ($orderIncrementId === null || ($clientReference !== '' && $clientReference !== $orderIncrementId)) {
+                throw new \Exception("Verified transaction {$transactionId} does not belong to order {$clientReference}.");
+            }
+
+            $order = $this->orderFactory->create()->loadByIncrementId($orderIncrementId);
             if (!$order || !$order->getId()) {
                 throw new \Exception("Order not found for reference: $reference");
             }
 
-            $verification = $this->payment->verifyTransaction($data['tx_ref']);
-            $this->logger->info('Flutterwave Transaction Verification: ' . json_encode($verification));
+            if (in_array($order->getState(), [Order::STATE_PROCESSING, Order::STATE_COMPLETE], true)) {
+                return $redirect->setPath('checkout/onepage/success');
+            }
+
+            if (!in_array($order->getState(), [Order::STATE_NEW, Order::STATE_PENDING_PAYMENT], true)) {
+                return $redirect->setPath('checkout/cart');
+            }
+
+            if ($verification['status'] !== Payment::STATUS_SUCCESSFUL) {
+                $this->messageManager->addErrorMessage(__('Your payment could not be verified. Please try again.'));
+                return $redirect->setPath('checkout/cart');
+            }
+
+            $order->getPayment()
+                ->setLastTransId($verification['id'])
+                ->setAdditionalInformation('flutterwave_transaction_id', $verification['id'])
+                ->setAdditionalInformation('flutterwave_tx_ref', $reference);
 
             if (
-                $status === 'success' &&
-                $verification['status'] === 'success' &&
                 $this->amounts_equal($order->getGrandTotal(), $verification['amount']) &&
                 $order->getOrderCurrencyCode() === $verification['currency']
             ) {
@@ -103,7 +132,7 @@ class Callback implements ActionInterface
                     (float) $verification['amount'],
                     'callback',
                     0.0,
-                    ['order_id' => (string) $order->getIncrementId(), 'status' => $status]
+                    ['order_id' => (string) $order->getIncrementId(), 'status' => $verification['status']]
                 );
 
                 $order->setState(Order::STATE_PROCESSING)
@@ -111,31 +140,19 @@ class Callback implements ActionInterface
                 $order->save();
 
                 return $redirect->setPath('checkout/onepage/success');
-            } elseif ($status === 'cancelled' &&
-                $verification['status'] === 'pending'
-            ){
-                $order->setState(Order::STATE_CANCELED)
-                ->setStatus(Order::STATE_CANCELED);
-                $order->save();
-                return $redirect->setPath('checkout/cart');
-            } elseif( !$this->amounts_equal($order->getGrandTotal(), $verification['amount'] ) || $order->getOrderCurrencyCode() !== $verification['currency'] ){
-                $order->setState(Order::STATE_HOLDED)
-                      ->setStatus(Order::STATE_HOLDED)
-                      ->addCommentToStatusHistory(__('Attention: New order has been placed on hold because of incorrect payment amount or currency. Please, look into it.  Amount Paid: '. $verification['currency'] .$verification['amount']));
-                return $redirect->setPath('checkout/cart');
-            } else {
-                $order->setState(Order::STATE_CANCELED)
-                      ->setStatus(Order::STATE_CANCELED)
-                      ->addCommentToStatusHistory(__('Payment Status could not be verified.'));
-                $order->save();
-
-                $this->messageManager->addErrorMessage(__('Your payment could not be verified. Please try again.'));
-                return $redirect->setPath('checkout/cart');
             }
+
+            $order->setState(Order::STATE_HOLDED)
+                  ->setStatus(Order::STATE_HOLDED)
+                  ->addCommentToStatusHistory(__('Attention: New order has been placed on hold because of incorrect payment amount or currency. Please, look into it.  Amount Paid: '. $verification['currency'] .$verification['amount']));
+            $order->save();
+
+            $this->messageManager->addErrorMessage(__('Your payment amount did not match the order total. Please contact support.'));
+            return $redirect->setPath('checkout/cart');
 
         } catch (\Exception $e) {
             $this->logger->error('Flutterwave Redirect Error: ' . $e->getMessage());
-            $this->signozLogger->trackError('callback.exception', $e->getMessage(), (string) ($reference ?? ''), $e->getTraceAsString(), ['source' => 'callback']);
+            $this->signozLogger->trackError('callback.exception', $e->getMessage(), $clientReference, $e->getTraceAsString(), ['source' => 'callback']);
             $this->messageManager->addErrorMessage(__('A server error occurred. Please contact support.'));
             return $redirect->setPath('checkout/cart');
         }
