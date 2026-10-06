@@ -25,7 +25,7 @@ class VerifyCommand implements CommandInterface
         
         $response = $this->apiClient->verifyTransaction($transactionId);
         
-        if ($response['status'] !== 'successful') {
+        if (($response['status'] ?? null) !== 'successful') {
             throw new \Exception('Payment verification failed');
         }
         

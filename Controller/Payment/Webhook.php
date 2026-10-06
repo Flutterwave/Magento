@@ -5,10 +5,9 @@ use Magento\Framework\App\Action\HttpPostActionInterface;
 use Magento\Framework\App\CsrfAwareActionInterface;
 use Magento\Framework\App\Request\InvalidRequestException;
 use Magento\Framework\App\RequestInterface;
+use Magento\Framework\App\Request\Http as HttpRequest;
 use Flutterwave\Payment\Model\Payment;
 use Magento\Sales\Model\Order;
-use Magento\Framework\Message\ManagerInterface;
-use Magento\Framework\Controller\ResultFactory;
 use Magento\Framework\Controller\Result\JsonFactory;
 use Magento\Sales\Model\OrderFactory;
 use Psr\Log\LoggerInterface;
@@ -20,14 +19,14 @@ class Webhook implements HttpPostActionInterface, CsrfAwareActionInterface
     private JsonFactory $jsonFactory;
     private OrderFactory $orderFactory;
     private $payment;
-    private $messageManager;
+    private HttpRequest $request;
     private FlutterwaveSignozLogger $signozLogger;
 
     public function __construct(
         LoggerInterface $logger,
         Payment $payment,
         JsonFactory $jsonFactory,
-        ManagerInterface $messageManager,
+        HttpRequest $request,
         OrderFactory $orderFactory,
         FlutterwaveSignozLogger $signozLogger
     ) {
@@ -35,40 +34,9 @@ class Webhook implements HttpPostActionInterface, CsrfAwareActionInterface
         $this->payment = $payment;
         $this->jsonFactory = $jsonFactory;
         $this->orderFactory = $orderFactory;
-        $this->messageManager = $messageManager;
+        $this->request = $request;
         $this->signozLogger = $signozLogger;
     }
-
-    /**
-	 * Get the Ip of the current request.
-	 *
-	 * @return string
-	 */
-	public function getFlutterwaveClientIp() {
-		$ip_keys = array(
-			'HTTP_CLIENT_IP',
-			'HTTP_X_FORWARDED_FOR',
-			'HTTP_X_FORWARDED',
-			'HTTP_X_CLUSTER_CLIENT_IP',
-			'HTTP_FORWARDED_FOR',
-			'HTTP_FORWARDED',
-			'REMOTE_ADDR',
-		);
-
-		foreach ( $ip_keys as $key ) {
-			if ( ! empty( $_SERVER[ $key ] ) ) {
-				$ip_list = explode( ',', $_SERVER[ $key ] );
-				foreach ( $ip_list as $ip ) {
-					$ip = trim( $ip );
-					if ( filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
-						return $ip;
-					}
-				}
-			}
-		}
-
-		return 'UNKNOWN';
-	}
 
     /**
 	 * Check Amount Equals.
@@ -93,107 +61,94 @@ class Webhook implements HttpPostActionInterface, CsrfAwareActionInterface
         $resultJson = $this->jsonFactory->create();
 
         try {
+            $secretHash = $this->payment->getSecretHash();
+            $signature = (string) $this->request->getHeader('verif-hash');
 
-            // if ( '52.3.180.49' !== $this->getFlutterwaveClientIp() ) {
-            //     $this->logger->info( 'Faudulent Webhook Notification Attempt [Access Restricted]: ' . (string) $this->getFlutterwaveClientIp() );
-            //     return $resultJson->setData(
-            //         array(
-            //             'status'  => 'error',
-            //             'message' => 'Unauthorized Access (Restriction)',
-            //         )
-            //     )->setHttpResponseCode(401);
-            // }
+            if ($secretHash === '' || $signature === '' || !hash_equals($secretHash, $signature)) {
+                $this->logger->warning('Flutterwave Webhook rejected: invalid or missing verif-hash.');
+                $this->signozLogger->trackError('webhook.unauthorized', 'Invalid or missing verif-hash header.', '', null, ['configured' => $secretHash !== '']);
+                return $resultJson->setData(['success' => false, 'message' => 'Unauthorized'])->setHttpResponseCode(401);
+            }
 
-            $payload = file_get_contents('php://input');
+            $payload = (string) $this->request->getContent();
             $this->logger->info('Flutterwave Webhook Payload: ' . $payload);
 
             $data = json_decode($payload, true);
+            $transactionId = isset($data['data']['id']) ? (string) $data['data']['id'] : '';
 
-            if (empty($data['data']['reference'])) {
-                $this->signozLogger->trackError('webhook.invalid_payload', 'Invalid webhook payload: Missing reference.', '', null, ['payload' => $payload]);
-                throw new \Exception('Invalid webhook payload: Missing reference.');
+            if ($transactionId === '' || !ctype_digit($transactionId)) {
+                $this->signozLogger->trackError('webhook.invalid_payload', 'Invalid webhook payload: Missing transaction id.', '', null, ['payload' => $payload]);
+                return $resultJson->setData(['success' => false, 'message' => 'Invalid webhook payload: Missing transaction id.'])->setHttpResponseCode(400);
             }
 
-            $reference = $data['data']['reference'];
-            $status = $data['data']['status'];
-            $this->signozLogger->trackRequestSent('webhook', $reference, '/flutterwave/payment/webhook', ['status' => $status]);
-            $parts = explode('_', $reference);
+            // Only the verified transaction is trusted; the payload status and tx_ref are ignored.
+            $verification = $this->payment->verifyTransaction($transactionId);
+            $this->logger->info('Flutterwave Transaction Verification: ' . json_encode($verification));
 
-            if (count($parts) < 2 || !is_numeric($parts[1])) {
-                throw new \Exception('Invalid reference format: ' . $reference);
+            if (empty($verification)) {
+                $this->signozLogger->trackError('webhook.verify_failed', 'Transaction could not be verified.', $transactionId, null, []);
+                return $resultJson->setData(['success' => false, 'message' => 'Transaction could not be verified.'])->setHttpResponseCode(502);
             }
 
-            $orderIncrementId = $parts[1];
+            $reference = $verification['tx_ref'];
+            $this->signozLogger->trackRequestSent('webhook', $reference, '/flutterwave/payment/webhook', ['status' => $verification['status']]);
+
+            $orderIncrementId = $this->payment->getOrderIncrementIdFromTxRef($reference);
+            if ($orderIncrementId === null) {
+                // Not a transaction created by this module; acknowledge so Flutterwave stops retrying.
+                return $resultJson->setData(['success' => true, 'message' => 'Transaction not handled by this store.'])->setHttpResponseCode(200);
+            }
+
             $order = $this->orderFactory->create()->loadByIncrementId($orderIncrementId);
 
             if (!$order || !$order->getId()) {
                 throw new \Exception("Order with Increment ID {$orderIncrementId} not found.");
             }
 
-            if(in_array($order->getState(), [ Order::STATE_PROCESSING, Order::STATE_COMPLETE ])) {
-                return $resultJson->setData(['success' => true, 'message' => 'Order Already Processed Successfully'])->setHttpResponseCode(400);
+            if (!in_array($order->getState(), [Order::STATE_NEW, Order::STATE_PENDING_PAYMENT], true)) {
+                return $resultJson->setData(['success' => true, 'message' => 'Order Already Processed'])->setHttpResponseCode(200);
             }
 
-            //TODO: get the current order status and make sure it is not completed. if so return a response stating it has been processed.
-            try {
-                $verification = $this->payment->verifyTransaction($data['reference']);
-                $this->logger->info('Flutterwave Transaction Verification: ' . json_encode($verification));
-
-                if (
-                    $status === 'success' &&
-                    $verification['status'] === 'success' &&
-                    $this->amounts_equal($order->getGrandTotal(), $verification['amount']) &&
-                    $order->getOrderCurrencyCode() === $verification['currency']
-                ) {
-                    $this->signozLogger->trackTransaction(
-                        $reference,
-                        (string) $order->getOrderCurrencyCode(),
-                        (float) $verification['amount'],
-                        'webhook',
-                        0.0,
-                        ['order_id' => (string) $order->getIncrementId(), 'status' => $status]
-                    );
-
-                    $order->setState(Order::STATE_PROCESSING)
-                          ->setStatus(Order::STATE_PROCESSING);
-                    $order->save();
-
-                    return $resultJson->setData(['success' => true, 'message' => 'Order Processed Successfully'])->setHttpResponseCode(201);
-                } elseif ($status === 'cancelled' &&
-                    $verification['status'] === 'pending'
-                ){
-                    $order->setState(Order::STATE_CANCELED)
-                    ->setStatus(Order::STATE_CANCELED);
-                    $order->save();
-                    return $resultJson->setData(['success' => true, 'message' => 'Order Processed Successfully'])->setHttpResponseCode(201);
-                } elseif( !$this->amounts_equal($order->getGrandTotal(), $verification['amount'] ) || $order->getOrderCurrencyCode() !== $verification['currency'] ){
-                    $order->setState(Order::STATE_HOLDED)
-                          ->setStatus(Order::STATE_HOLDED)
-                          ->addCommentToStatusHistory(__('Attention: New order has been placed on hold because of incorrect payment amount or currency. Please, look into it.  Amount Paid: '. $verification['currency'] .$verification['amount']));
-                    return $resultJson->setData(['success' => true, 'message' => 'Order Processed Successfully'])->setHttpResponseCode(201);
-                } else {
-                    $order->setState(Order::STATE_CANCELED)
-                          ->setStatus(Order::STATE_CANCELED)
-                          ->addCommentToStatusHistory(__('Payment Status could not be verified. Please try resending the webhook for this transaction.'));
-                    $order->save();
-
-                    $this->messageManager->addErrorMessage(__('Your payment could not be verified. Please try again.'));
-                    $resultJson->setData(['success' => true, 'message' => 'Order Processed Successfully'])->setHttpResponseCode(201);
-                }
-
-            } catch (\Exception $e) {
-                $this->logger->error('Flutterwave Redirect Error: ' . $e->getMessage());
-                $this->signozLogger->trackError('webhook.verify_failed', $e->getMessage(), $reference ?? '', $e->getTraceAsString(), ['status' => $status ?? 'unknown']);
-                $this->messageManager->addErrorMessage(__('A server error occurred. Please contact support.'));
-                return $resultJson->setData(['success' => false, 'message' => $e->getMessage()])->setHttpResponseCode(500);
+            if ($verification['status'] !== Payment::STATUS_SUCCESSFUL) {
+                // Failed or pending attempts leave the order open so the customer can retry.
+                return $resultJson->setData(['success' => true, 'message' => 'Payment not successful; order left unchanged.'])->setHttpResponseCode(200);
             }
 
+            $order->getPayment()
+                ->setLastTransId($verification['id'])
+                ->setAdditionalInformation('flutterwave_transaction_id', $verification['id'])
+                ->setAdditionalInformation('flutterwave_tx_ref', $reference);
 
-            return $resultJson->setData(['success' => true, 'message' => 'Webhook for Order' . $orderIncrementId . ' received and processed'])->setHttpResponseCode(201);
+            if (
+                $this->amounts_equal($order->getGrandTotal(), $verification['amount']) &&
+                $order->getOrderCurrencyCode() === $verification['currency']
+            ) {
+                $this->signozLogger->trackTransaction(
+                    $reference,
+                    (string) $order->getOrderCurrencyCode(),
+                    (float) $verification['amount'],
+                    'webhook',
+                    0.0,
+                    ['order_id' => (string) $order->getIncrementId(), 'status' => $verification['status']]
+                );
+
+                $order->setState(Order::STATE_PROCESSING)
+                      ->setStatus(Order::STATE_PROCESSING);
+                $order->save();
+
+                return $resultJson->setData(['success' => true, 'message' => 'Order Processed Successfully'])->setHttpResponseCode(200);
+            }
+
+            $order->setState(Order::STATE_HOLDED)
+                  ->setStatus(Order::STATE_HOLDED)
+                  ->addCommentToStatusHistory(__('Attention: New order has been placed on hold because of incorrect payment amount or currency. Please, look into it.  Amount Paid: '. $verification['currency'] .$verification['amount']));
+            $order->save();
+
+            return $resultJson->setData(['success' => true, 'message' => 'Order placed on hold'])->setHttpResponseCode(200);
         } catch (\Exception $e) {
             $this->logger->critical('Flutterwave Webhook Error: ' . $e->getMessage());
             $this->signozLogger->trackError('webhook.exception', $e->getMessage(), '', $e->getTraceAsString(), ['source' => 'webhook']);
-            return $resultJson->setData(['success' => false, 'message' => $e->getMessage()])->setHttpResponseCode(500);
+            return $resultJson->setData(['success' => false, 'message' => 'Webhook processing failed'])->setHttpResponseCode(500);
         }
     }
 

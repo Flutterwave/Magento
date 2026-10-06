@@ -28,6 +28,11 @@ jobs:
             -x "node_modules/*" \
             -x "vendor/*" \
             -x "var/*" \
+            -x "Test/*" \
+            -x "build/*" \
+            -x ".phpunit.cache/*" \
+            -x "phpunit.xml.dist" \
+            -x "composer.lock" \
             -x "*.DS_Store"
 
           echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> "$GITHUB_ENV"
