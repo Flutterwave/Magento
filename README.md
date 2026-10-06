@@ -55,6 +55,7 @@ Available settings:
 - `Enable Flutterwave Payment`: Enable/disable the payment method
 - `Title`: The title shown to customers at checkout
 - `API Secret Key`: Secret API key used to sign requests
+- `Webhook Secret Hash`: Must match the Secret Hash configured for webhooks in the Flutterwave dashboard. Webhooks without a matching `verif-hash` header are rejected, and all webhooks are rejected while this is empty.
 - `API Public Key`: Public API key / identifier
 - `Sort Order`: Display order among payment methods
 - `Webhook URL`: A label/readonly field that shows the webhook endpoint you should register in the Flutterwave dashboard
@@ -67,7 +68,7 @@ Register the webhook endpoint at your Flutterwave merchant dashboard. The webhoo
 <magento_base_url>/flutterwave/payment/webhook
 ```
 
-Replace `<magento_base_url>` with your store's base URL (for example `https://store.example.com/flutterwave/payment/webhook`). The module exposes controllers to handle webhook notifications and payment callbacks.
+Replace `<magento_base_url>` with your store's base URL (for example `https://store.example.com/flutterwave/payment/webhook`). Set a Secret Hash on the same dashboard page and enter the same value in the module's `Webhook Secret Hash` setting. The module exposes controllers to handle webhook notifications and payment callbacks.
 
 ## Usage
 
@@ -94,9 +95,21 @@ Important code locations:
 
 - To customize request/response handling, modify `Model/Api/Client.php` and `Model/Payment/FlutterwaveAdapter.php`.
 - To change checkout behaviors or UI, edit the KnockoutJS view models in `view/frontend/web/js/view/payment/` and the template `view/frontend/web/template/payment/flutterwave.html`.
-- Add unit/integration tests alongside the relevant classes where needed.
+- Add unit tests under `Test/Unit/<Component>` mirroring the class path.
 
 ## Testing & debugging
+
+Unit tests live in `Test/Unit` and run without a Magento installation; Magento packages come from the public [Mage-OS mirror](https://mirror.mage-os.org/).
+
+```bash
+composer update --ignore-platform-req='ext-*' --no-scripts
+vendor/bin/phpunit                                  # all tests
+vendor/bin/phpunit --testsuite Controller           # one component: Block, Controller, Gateway or Model
+vendor/bin/phpunit --testsuite Controller --coverage-clover build/coverage/Controller.xml
+php Test/coverage-check.php build/coverage/Controller.xml 90 Controller   # fails below 90% line coverage
+```
+
+Coverage needs pcov or Xdebug. The `Tests` GitHub workflow runs each component separately and fails if its line coverage drops below 90%, and runs the full suite on PHP 8.1–8.4.
 
 - Enable developer mode in Magento to see error output: `php bin/magento deploy:mode:set developer`.
 - Check `var/log/` and `var/report` for exceptions and debug messages.

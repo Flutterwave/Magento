@@ -1,0 +1,49 @@
+{
+    "name": "flutterwave/module-payment",
+    "description": "Flutterwave payment method for Magento 2",
+    "type": "magento2-module",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.1"
+    },
+    "require-dev": {
+        "magento/framework": "*",
+        "magento/module-backend": "*",
+        "magento/module-checkout": "*",
+        "magento/module-config": "*",
+        "magento/module-payment": "*",
+        "magento/module-quote": "*",
+        "magento/module-sales": "*",
+        "magento/module-store": "*",
+        "phpunit/phpunit": "^10.5"
+    },
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "https://mirror.mage-os.org/",
+            "only": ["magento/*"]
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Flutterwave\\Payment\\": ""
+        },
+        "files": [
+            "registration.php"
+        ],
+        "exclude-from-classmap": [
+            "/Test/"
+        ]
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test:coverage": "phpunit --coverage-clover build/coverage/clover.xml && php Test/coverage-check.php build/coverage/clover.xml 90"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": false,
+        "audit": {
+            "block-insecure": false
+        }
+    }
+}
