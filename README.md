@@ -8,7 +8,7 @@
 
 Download the latest packaged module ZIP from the GitHub Releases page:
 
-- [Releases](https://github.com/OWNER/REPO/releases)
+- [Releases](https://github.com/Flutterwave/Magento/releases)
 
 ## Introduction
 
